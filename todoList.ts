@@ -208,9 +208,7 @@ function createTask(repo: taskRepository,
                     priority: Priority,
                     assignedTo: string, tags: Tag,
                     state: taskStatus,
-                    //creationDate: Date,
-                    //UpdateDate: Date,
-                    //statusHistory: StateChange[]
+                    
 
 
 ): Result<task, taskError>{
@@ -308,13 +306,97 @@ function changeStatus(repo: taskRepository,
                         State: newState,
                         updateDate: new Date(),
                         statusHistory: [...task.statusHistory, change] 
-                        // statusHistory es un arreglo (StateChange[]) y change es un objeto,
-                        //  no un índice numérico; para agregarlo al arreglo usare
-                        //  [...task.statusHistory, change], 
-                        // anteriormente tenia task.statusHistory[change].
+                        
 
     }
 
     return repo.save(taskUpdate)
 
 }
+
+type predicateTask = (task: task) => boolean;
+
+//esta funcion filtra las tareas por estados
+function forState(state: taskStatus) : predicateTask{
+    return (t: task) => t.state === state;
+}
+
+//filtrado por prioridad 
+function byPriority(priority: Priority): predicateTask{
+    return (t: task) => t.priority === priority;
+}
+
+//por asigancion 
+function byAssignment(user: string): predicateTask{
+    return (t: task) => t.assignedTo == user;
+}
+
+function byTag(tag: Tag): predicateTask{
+    return (t: task) => t.tags.includes(tag);
+}
+
+function Combine(predicates: predicateTask[] ): predicateTask{
+    // Retorna un nuevo predicado que evalúa una tarea 't': .every() actúa como un "Y" lógico, 
+    // asegurando que la tarea cumpla con TODOS los predicados de la lista.
+    return (t: task) => predicates.every(predicates => predicates(t));
+}
+
+
+function filterTasks(repo: taskRepository, predicate: predicateTask) : task[]{
+    return repo.listAll().filter(predicate);
+}
+
+
+// analiticas
+
+interface Analytics {
+    totalTask: number,
+    forState: Map<taskStatus, number>,
+    forPriority: Map<Priority, number>
+    averageResolutionTime: number,
+    expiredOrBlocked: number
+}
+
+function calculateAnalytics(repo: taskRepository): Analytics{
+   const  tasks = repo.listAll();
+
+   const conuntByState = tasks.reduce((cbs, t) => {
+        cbs.set(t.state,(cbs.get(t.state) || 0 ) +1 );
+        return cbs;
+   }, new Map<taskStatus, number>());
+
+
+  const countByPriority = tasks.reduce((cbp, t) => {
+    cbp.set(t.priority, (cbp.get(t.priority) || 0 ) +1);
+    return cbp;
+  }, new Map<Priority, number>())
+    
+  const complete = tasks.filter((t) => t.state === 'COMPLETED' )
+  const time = complete.map(t => (t.UpdateDate.getTime() - t.creationDate.getTime()))
+
+  
+  //uso operdaor ternario para sacar el promedio de tiempos de las tareas
+  const average  = time.length > 0 ? time.reduce((avg, t) => avg + t, 0) / time.length : 0;
+
+  const blocked = tasks.filter(t => t.state === 'BLOCKED').length
+
+  return {
+    totalTask: tasks.length,
+    forState: conuntByState,
+    forPriority: countByPriority,
+    averageResolutionTime: average,
+    expiredOrBlocked: blocked
+
+
+  }
+
+
+
+}
+
+
+/*
+
+
+
+*/
