@@ -16,7 +16,7 @@ enum Priority{
 
 
 //esto representa un string no vacio 
-export type NonEmptyString = string & { readonly __brand: 'NonEmptyString'};
+export type NonEmptyString = string & { readonly __brand: 'NonEmptyString'   };
 
 
 //valido en tiempo de ejecucion que el valor no sea vacio 
@@ -206,7 +206,8 @@ function createTask(repo: taskRepository,
                     id: string, 
                     title: string,
                     priority: Priority,
-                    assignedTo: string, tags: Tag,
+                    assignedTo: string,
+                    tags: Tag,
                     state: taskStatus,
                     
 
@@ -357,6 +358,7 @@ interface Analytics {
     expiredOrBlocked: number
 }
 
+//calcular analiticas 
 function calculateAnalytics(repo: taskRepository): Analytics{
    const  tasks = repo.listAll();
 
@@ -379,24 +381,73 @@ function calculateAnalytics(repo: taskRepository): Analytics{
   const average  = time.length > 0 ? time.reduce((avg, t) => avg + t, 0) / time.length : 0;
 
   const blocked = tasks.filter(t => t.state === 'BLOCKED').length
-
-  return {
+ 
+  
+  const finalReturn = {
     totalTask: tasks.length,
     forState: conuntByState,
     forPriority: countByPriority,
     averageResolutionTime: average,
     expiredOrBlocked: blocked
-
-
   }
+  return  finalReturn;
 
 
 
 }
 
+    type Command = 
+    | {tipe: "create"; title: string; id: string; priority: Priority; assignedTo: string, tags: Tag; state: taskStatus}
+    | {tipe: "changeStatus"; id: taskID; newState: taskStatus; reason: string  }    
+    | {tipe: "filter"; criterion: predicateTask[]}
+    | {tipe: "analytics"}
+    
 
-/*
 
+    function excuteCommand( repo: taskRepository, command: Command): string{
+        switch(command.tipe){
+            case "create":
+           const result = createTask(repo, command.title, command.id, command.priority, command.assignedTo, command.tags, command.state )
+           
+            if(result.status === 'Exit'){
+                return "Tarea Creada con Exito " + result.value.id;
+            }else{
+                return "Error al crear la tarea " + result.error
+            }
 
+            case "changeStatus":
+                const result2 = changeStatus(repo, command.id, command.newState, command.reason)
+                if(result2.status === 'Exit'){
+                    return `Se actualizó el estado de la tarea ${result2.value.id} a ${result2.value.state} correctamente`
+                }else{
+                    return "Error al actualizar la tarea " + result2.error
+                }
 
-*/
+                case "filter":
+                    const list = filterTasks(repo, Combine(command.criterion) )
+                  
+                    if(list.length === 0){
+                        return "No se encontraron tareas con ese criterio"
+                    }
+                    return list
+                        .map(t => `- [${t.id}] ${t.title} (Estado: ${t.state}, Prioridad: ${t.priority})`)
+                        .join('\n');
+                case "analytics":
+                   const data = calculateAnalytics(repo);
+                  if(data.totalTask === 0  ){
+                        return "No hay analiticas disponibles"
+                  }
+                /*
+                let  finalData: object;
+                finalData = {
+                    data: data.totalTask,
+                    data2: data.forState,
+                    data3: data.forPriority,
+                    data4: data.averageResolutionTime,
+                    data5: data.expiredOrBlocked
+                }
+                  */
+                return `Total Tareas: ${data.totalTask} Estados ${data.forState} Prioridades ${data.forPriority} Promedio de resolucion ${data.averageResolutionTime} Expiradas o bloqueadas {data.expiredOrBlocked}`
+                
+    }
+}
