@@ -7,3 +7,5 @@ export function NonEmptyString(val: string): NonEmptyString{
 
         return val as NonEmptyString;
 }
+
+console.log(NonEmptyString('Hola mundo'));
