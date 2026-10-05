@@ -720,5 +720,5 @@ async function main() {
   rl.close();
 }
 
-// Ejecutar la aplicación
+
 main();
