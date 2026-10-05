@@ -1,3 +1,6 @@
+import * as readline from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+
 
 type taskStatus =
    | 'PENDING'      
@@ -8,10 +11,10 @@ type taskStatus =
    | 'CANCELLED'   
 
 enum Priority{
-    low,        
-    average,
-    high,
-    criticism
+    low = 1,        
+    average = 2,
+    high = 3,
+    criticism = 4
 }
 
 
@@ -31,7 +34,7 @@ export function NonEmptyString(val: string): NonEmptyString{
 //alias especificos
 
 export type taskID = NonEmptyString & {readonly __taskID: unique symbol}; 
-export type Tag = NonEmptyString & { readonly __etiqueta: unique symbol};
+export type Tag = NonEmptyString & { readonly __tag: unique symbol};
 
 //y voy a necesitar algo para crear tareas con id de string 
 
@@ -67,16 +70,6 @@ export interface task {
     
 }
 
-/*
----------------------------------------------------
----------------------------------------------------
----------------------------------------------------
-         ANTES DE AQUI CAMBIE EL CODIGO ANTERIOR
-___________________________________________________
-___________________________________________________
-___________________________________________________
-*/
-
 
 
 const Allowed_transitions: Record<taskStatus, ReadonlySet<taskStatus>> = {
@@ -89,12 +82,6 @@ const Allowed_transitions: Record<taskStatus, ReadonlySet<taskStatus>> = {
     CANCELLED:  new Set(),
 };
 
-/*
-FUNCION esTransicionValida(actual: EstadoTarea, siguiente: EstadoTarea) -> BOOLEANO
-    RETORNAR siguiente PERTENECE_A TransicionesPermitidas[actual]
-FIN FUNCION
-
-*/
 
 function isValidTransition(current: taskStatus, after: taskStatus ): boolean {
     return Allowed_transitions[current].has(after);
@@ -106,13 +93,6 @@ type Result<T, E> =
   | { status: 'Error'; error: E };
 
 
-/*
-
-ESTRUCTURA Exito<T> { valor: T }
-ESTRUCTURA Error<E>  { error: E }
-
-
-*/
 export const Exit = <T>(value: T) => ({
     ok: true,
     value
@@ -124,7 +104,7 @@ export const theError = <E>(value: E) => ({
 })
 
 enum taskError{
-    INVALID_TITLE = "el titulo es invalido o esta vacio",
+    INVALID_TITLE = 'el titulo es invalido o esta vacio',
     TRANSITION_NOT_ALLOWED = "No se Permite La transicion",
     TASK_NOT_FOUND = "error, no se encontro la tarea",
     DUPLICATED_ID = "id duplicado"
@@ -150,10 +130,7 @@ class InMemoryRepository implements taskRepository {
     getForID(id: taskID): Result<task, taskError> {
         
             if(!this.tasks.has(id)){
-                let resultError = Error(taskError.TASK_NOT_FOUND);
-                
-                let err = Object;
-                return err(resultError)
+                return { status: 'Error', error: taskError.TASK_NOT_FOUND };
             }
         return {
             status: 'Exit' ,
@@ -162,46 +139,36 @@ class InMemoryRepository implements taskRepository {
     }
 
     save(task: task): Result<task, taskError> {
-       // let saveTask: object;
-        
-        if(!this.tasks.has(task.id)){
-                let resultError = Error(taskError.TASK_NOT_FOUND);
-                
-                let err = Object;
-                return err(resultError)
-            }
-
-
-       
-       
-        this.tasks.set(task.id, task)
       
-
+       this.tasks.set(task.id, task);
        
+
+
         return   {status: 'Exit', value: task};
     }
 
     listAll(): task[] {
-        return Object.values(this.tasks)
+
+
+        //posible optimizacion para devolver un array de tareas en lugar de un Map
+        return Array.from(this.tasks.values());
+
+        //return Object.values(this.tasks)
     }
 
     delete(id: taskID): Result<void, taskError> {
         if(!this.tasks.has(id)){
-             let isError = Error(taskError.TASK_NOT_FOUND);
-                
-                let error = Object;
-                return error(isError)
+             return { status: 'Error', error: taskError.TASK_NOT_FOUND };
         }
 
         this.tasks.delete(id);
 
-        return {status: "Exit", value: void("Se elimino la tarea correctamente")};
+        return {status: "Exit", value: undefined};
     }
         
 }
 
 
-//state: taskStatus;
 function createTask(repo: taskRepository,
                     id: string, 
                     title: string,
@@ -219,40 +186,42 @@ function createTask(repo: taskRepository,
     return{
         status: 'Error',
         error: taskError.INVALID_TITLE
-    }
+    };
     } 
-    
-    const currentId = createTaskID(id);
-    
-    if(repo.getForID(currentId).status === 'Exit'){
-        return{
-            status: 'Error',
-            error: taskError.DUPLICATED_ID
-        }
-    }
 
-    
-    // NonEmptyString(title);
+    try {
+    const currentId = createTaskID(id);
+    if (repo.getForID(currentId).status === 'Exit') {
+      return {
+        status: 'Error',
+        error: taskError.DUPLICATED_ID,
+      };
+    }
 
     const newTask: task = {
-        id: createTaskID(id),
-         title: NonEmptyString(title),
-         description: null,
-        priority: priority,
-        assignedTo: assignedTo,
-        state: state,
-        tags: tags,
-        creationDate: new Date(),
-        UpdateDate: new Date(),
-        statusHistory: []
-    }
-   
-    return {
-        status: 'Exit',
-        value: newTask
-    }
-}
+      id: currentId,
+      title: NonEmptyString(title),
+      description: null,
+      priority: priority,
+      assignedTo: assignedTo,
+      state: state,
+      tags: tags,
+      creationDate: new Date(),
+      UpdateDate: new Date(),
+      statusHistory: [],
+    };
 
+    return {
+      status: 'Exit',
+      value: newTask,
+    };
+  } catch {
+    return {
+      status: 'Error',
+      error: taskError.INVALID_TITLE,
+    };
+  }
+}
 
 function changeStatus(repo: taskRepository, 
                       id: taskID,
@@ -262,12 +231,9 @@ function changeStatus(repo: taskRepository,
                        
 ): Result<task, taskError>{
     
-   const taskId = createTaskID(id);
 
-        const foundResult = repo.getForID(taskId);
-       // const task = searchResult.value 
-    
-   
+        const foundResult = repo.getForID(id);
+      
 
     // verifica que se encuentre el id o que sea real
     if(foundResult.status === 'Error'){
@@ -275,7 +241,7 @@ function changeStatus(repo: taskRepository,
         return{
             status: 'Error',
             error: taskError.TASK_NOT_FOUND
-        }
+        };
 
         
     }
@@ -288,7 +254,7 @@ function changeStatus(repo: taskRepository,
             status: 'Error',
             error: taskError.TRANSITION_NOT_ALLOWED
 
-        }
+        };
     }
 
 
@@ -362,7 +328,7 @@ interface Analytics {
 function calculateAnalytics(repo: taskRepository): Analytics{
    const  tasks = repo.listAll();
 
-   const conuntByState = tasks.reduce((cbs, t) => {
+   const countByState = tasks.reduce((cbs, t) => {
         cbs.set(t.state,(cbs.get(t.state) || 0 ) +1 );
         return cbs;
    }, new Map<taskStatus, number>());
@@ -383,71 +349,376 @@ function calculateAnalytics(repo: taskRepository): Analytics{
   const blocked = tasks.filter(t => t.state === 'BLOCKED').length
  
   
-  const finalReturn = {
+   return  {
     totalTask: tasks.length,
-    forState: conuntByState,
+    forState: countByState,
     forPriority: countByPriority,
     averageResolutionTime: average,
     expiredOrBlocked: blocked
+  };
+ 
+// FUNCIONES AUXILIARES Y DE FORMATO DEL CLI
+
+
+}
+function formatTaskSummary(t: task): string {
+  return `[${t.id}] ${t.title} | Estado: ${t.state} | Prioridad: ${priorityToText(t.priority)} | Responsable: ${t.assignedTo}`;
+}
+
+function optionToPriority(option: string): Priority | null {
+  switch (option) {
+    case '1':
+      return Priority.low;
+    case '2':
+      return Priority.average;
+    case '3':
+      return Priority.high;
+    case '4':
+      return Priority.criticism;
+    default:
+      return null;
   }
-  return  finalReturn;
-
-
-
 }
 
-    type Command = 
-    | {tipe: "create"; title: string; id: string; priority: Priority; assignedTo: string, tags: Tag; state: taskStatus}
-    | {tipe: "changeStatus"; id: taskID; newState: taskStatus; reason: string  }    
-    | {tipe: "filter"; criterion: predicateTask[]}
-    | {tipe: "analytics"}
-    
+function priorityToText(p: Priority): string {
+  switch (p) {
+    case Priority.low:
+      return 'Baja';
+    case Priority.average:
+      return 'Media';
+    case Priority.high:
+      return 'Alta';
+    case Priority.criticism:
+      return 'Crítica';
+    default:
+      return 'Desconocida';
+  }
+}
 
+function optionToStatus(option: string): taskStatus | null {
+  switch (option) {
+    case '1':
+      return 'PENDING';
+    case '2':
+      return 'IN_PROGRESS';
+    case '3':
+      return 'UNDER_REVIEW';
+    case '4':
+      return 'BLOCKED';
+    case '5':
+      return 'COMPLETED';
+    case '6':
+      return 'CANCELLED';
+    default:
+      return null;
+  }
+}
 
-    function excuteCommand( repo: taskRepository, command: Command): string{
-        switch(command.tipe){
-            case "create":
-           const result = createTask(repo, command.title, command.id, command.priority, command.assignedTo, command.tags, command.state )
-           
-            if(result.status === 'Exit'){
-                return "Tarea Creada con Exito " + result.value.id;
-            }else{
-                return "Error al crear la tarea " + result.error
-            }
+async function promptStatus(rl: readline.Interface): Promise<taskStatus | null> {
+  console.log('1. Pendiente');
+  console.log('2. En progreso');
+  console.log('3. En revisión');
+  console.log('4. Bloqueada');
+  console.log('5. Completada');
+  console.log('6. Cancelada');
+  const option = await rl.question('Selecciona estado: ');
+  return optionToStatus(option.trim());
+}
 
-            case "changeStatus":
-                const result2 = changeStatus(repo, command.id, command.newState, command.reason)
-                if(result2.status === 'Exit'){
-                    return `Se actualizó el estado de la tarea ${result2.value.id} a ${result2.value.state} correctamente`
-                }else{
-                    return "Error al actualizar la tarea " + result2.error
-                }
+async function promptPriority(rl: readline.Interface): Promise<Priority | null> {
+  console.log('1. Baja');
+  console.log('2. Media');
+  console.log('3. Alta');
+  console.log('4. Crítica');
+  const option = await rl.question('Selecciona prioridad: ');
+  return optionToPriority(option.trim());
+}
 
-                case "filter":
-                    const list = filterTasks(repo, Combine(command.criterion) )
-                  
-                    if(list.length === 0){
-                        return "No se encontraron tareas con ese criterio"
-                    }
-                    return list
-                        .map(t => `- [${t.id}] ${t.title} (Estado: ${t.state}, Prioridad: ${t.priority})`)
-                        .join('\n');
-                case "analytics":
-                   const data = calculateAnalytics(repo);
-                  if(data.totalTask === 0  ){
-                        return "No hay analiticas disponibles"
-                  }
-                /*
-                let  finalData: object;
-                finalData = {
-                    data: data.totalTask,
-                    data2: data.forState,
-                    data3: data.forPriority,
-                    data4: data.averageResolutionTime,
-                    data5: data.expiredOrBlocked
-                }
-                  */
-                return `Total Tareas: ${data.totalTask} Estados ${data.forState} Prioridades ${data.forPriority} Promedio de resolucion ${data.averageResolutionTime} Expiradas o bloqueadas {data.expiredOrBlocked}`
-                
+// =====================================================================
+// FLUJOS DEL CLI
+// =====================================================================
+
+async function createTaskFlow(repo: taskRepository, rl: readline.Interface) {
+  console.log('\n--- Crear nueva tarea ---');
+  const id = (await rl.question('ID: ')).trim();
+  const title = (await rl.question('Título: ')).trim();
+  const description = (await rl.question('Descripción opcional: ')).trim();
+  const assignedTo = (await rl.question('Asignada a: ')).trim();
+  const tagStr = (await rl.question('Etiqueta: ')).trim();
+
+  console.log('Prioridad:');
+  const priority = await promptPriority(rl);
+
+  if (priority === null) {
+    console.log('Prioridad inválida');
+    return;
+  }
+
+  try {
+    const tag = createTag(tagStr);
+    const result = createTask(
+      repo,
+      id,
+      title,
+      priority,
+      assignedTo,
+      tag,
+      'PENDING'
+    );
+
+    if (result.status === 'Exit') {
+      const taskItem = result.value;
+      taskItem.description = description.length > 0 ? description : null;
+      repo.save(taskItem);
+
+      console.log('\nTarea creada correctamente');
+      console.log(formatTaskSummary(taskItem));
+    } else {
+      console.log('\nNo se pudo crear la tarea');
+      console.log(result.error);
     }
+  } catch (err: any) {
+    console.log('\nError en los datos ingresados:', err.message || err);
+  }
 }
+
+async function listTasksFlow(repo: taskRepository) {
+  const tasks = repo.listAll();
+  if (tasks.length === 0) {
+    console.log('\nNo hay tareas registradas');
+    return;
+  }
+
+  console.log('\n--- Tareas registradas ---');
+  for (const taskItem of tasks) {
+    console.log(formatTaskSummary(taskItem));
+  }
+}
+
+async function showTaskDetailFlow(repo: taskRepository, rl: readline.Interface) {
+  const id = (await rl.question('\nID de la tarea: ')).trim();
+
+  try {
+    const taskId = createTaskID(id);
+    const result = repo.getForID(taskId);
+
+    if (result.status === 'Error') {
+      console.log('No se encontró la tarea');
+      return;
+    }
+
+    const t = result.value;
+
+    console.log('\n--- Detalle de tarea ---');
+    console.log(`ID: ${t.id}`);
+    console.log(`Título: ${t.title}`);
+    console.log(`Descripción: ${t.description ?? ''}`);
+    console.log(`Estado: ${t.state}`);
+    console.log(`Prioridad: ${priorityToText(t.priority)}`);
+    console.log(`Asignada a: ${t.assignedTo}`);
+    console.log(`Etiqueta: ${t.tags}`);
+    console.log(`Creada: ${t.creationDate.toLocaleString()}`);
+    console.log(`Actualizada: ${t.UpdateDate.toLocaleString()}`);
+
+    if (t.statusHistory.length === 0) {
+      console.log('Sin cambios de estado');
+    } else {
+      console.log('Historial de estados:');
+      for (const change of t.statusHistory) {
+        console.log(
+          `  ${change.previousState} -> ${change.conditionNew} en ${change.date.toLocaleString()}`
+        );
+      }
+    }
+  } catch {
+    console.log('ID inválido o no encontrado');
+  }
+}
+
+async function changeStatusFlow(repo: taskRepository, rl: readline.Interface) {
+  const idStr = (await rl.question('\nID de la tarea: ')).trim();
+
+  console.log('Nuevo estado:');
+  const newStatus = await promptStatus(rl);
+
+  if (!newStatus) {
+    console.log('Estado inválido');
+    return;
+  }
+
+  const reason = (await rl.question('Razón opcional del cambio: ')).trim();
+
+  try {
+    const taskId = createTaskID(idStr);
+    const result = changeStatus(repo, taskId, newStatus, reason);
+
+    if (result.status === 'Exit') {
+      console.log('\nEstado actualizado correctamente');
+      console.log(formatTaskSummary(result.value));
+    } else {
+      console.log('\nNo se pudo cambiar el estado');
+      console.log(result.error);
+    }
+  } catch {
+    console.log('ID inválido');
+  }
+}
+
+async function filterTasksFlow(repo: taskRepository, rl: readline.Interface) {
+  console.log('\nFiltrar por:');
+  console.log('1. Estado');
+  console.log('2. Prioridad');
+  console.log('3. Responsable');
+  console.log('4. Etiqueta');
+
+  const filterOption = (await rl.question('Selecciona filtro: ')).trim();
+  let criterion: predicateTask | null = null;
+
+  if (filterOption === '1') {
+    const status = await promptStatus(rl);
+    if (status) criterion = forState(status);
+  } else if (filterOption === '2') {
+    const priority = await promptPriority(rl);
+    if (priority !== null) criterion = byPriority(priority);
+  } else if (filterOption === '3') {
+    const assignee = (await rl.question('Responsable: ')).trim();
+    criterion = byAssignment(assignee);
+  } else if (filterOption === '4') {
+    const tagInput = (await rl.question('Etiqueta: ')).trim();
+    try {
+      criterion = byTag(createTag(tagInput));
+    } catch {
+      console.log('Etiqueta inválida');
+      return;
+    }
+  } else {
+    console.log('Filtro inválido');
+    return;
+  }
+
+  if (!criterion) {
+    console.log('Criterio inválido');
+    return;
+  }
+
+  const tasks = filterTasks(repo, criterion);
+
+  if (tasks.length === 0) {
+    console.log('\nNo se encontraron tareas con ese criterio');
+    return;
+  }
+
+  console.log('\n--- Resultados del filtro ---');
+  for (const taskItem of tasks) {
+    console.log(formatTaskSummary(taskItem));
+  }
+}
+
+async function showAnalyticsFlow(repo: taskRepository) {
+  const analytics = calculateAnalytics(repo);
+
+  if (analytics.totalTask === 0) {
+    console.log('\nNo hay analíticas disponibles');
+    return;
+  }
+
+  console.log('\n--- Analíticas ---');
+  console.log(`Total de tareas: ${analytics.totalTask}`);
+
+  console.log('Tareas por estado:');
+  analytics.forState.forEach((count, status) => {
+    console.log(`  ${status}: ${count}`);
+  });
+
+  console.log('Tareas por prioridad:');
+  analytics.forPriority.forEach((count, priority) => {
+    console.log(`  ${priorityToText(priority)}: ${count}`);
+  });
+
+  console.log(`Promedio de resolución (ms): ${analytics.averageResolutionTime}`);
+  console.log(`Bloqueadas: ${analytics.expiredOrBlocked}`);
+}
+
+async function deleteTaskFlow(repo: taskRepository, rl: readline.Interface) {
+  const idStr = (await rl.question('\nID de la tarea a eliminar: ')).trim();
+  const confirmation = (await rl.question('Escribe SI para confirmar: ')).trim();
+
+  if (confirmation !== 'SI') {
+    console.log('Eliminación cancelada');
+    return;
+  }
+
+  try {
+    const taskId = createTaskID(idStr);
+    const result = repo.delete(taskId);
+
+    if (result.status === 'Exit') {
+      console.log('Tarea eliminada correctamente');
+    } else {
+      console.log('No se pudo eliminar la tarea');
+      console.log(result.error);
+    }
+  } catch {
+    console.log('ID inválido');
+  }
+}
+
+// =====================================================================
+// BUCLE PRINCIPAL (CLI)
+// =====================================================================
+
+async function main() {
+  const repo = new InMemoryRepository();
+  const rl = readline.createInterface({ input, output });
+
+  console.log('Gestor de tareas por consola');
+
+  let option = '';
+  do {
+    console.log('\n1. Crear tarea');
+    console.log('2. Listar todas las tareas');
+    console.log('3. Ver detalle de una tarea');
+    console.log('4. Cambiar estado de una tarea');
+    console.log('5. Filtrar tareas');
+    console.log('6. Ver analíticas');
+    console.log('7. Eliminar tarea');
+    console.log('0. Salir');
+
+    option = (await rl.question('\nSelecciona una opción: ')).trim();
+
+    switch (option) {
+      case '1':
+        await createTaskFlow(repo, rl);
+        break;
+      case '2':
+        await listTasksFlow(repo);
+        break;
+      case '3':
+        await showTaskDetailFlow(repo, rl);
+        break;
+      case '4':
+        await changeStatusFlow(repo, rl);
+        break;
+      case '5':
+        await filterTasksFlow(repo, rl);
+        break;
+      case '6':
+        await showAnalyticsFlow(repo);
+        break;
+      case '7':
+        await deleteTaskFlow(repo, rl);
+        break;
+      case '0':
+        console.log('Saliendo...');
+        break;
+      default:
+        console.log('Opción inválida');
+        break;
+    }
+  } while (option !== '0');
+
+  rl.close();
+}
+
+// Ejecutar la aplicación
+main();
